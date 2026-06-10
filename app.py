@@ -651,62 +651,45 @@ SIG7 = np.array([0.32, 0.28, 0.30, 0.35, 0.25, 0.30])
 TOTAL7 = 60000
 
 
-def _nondominated(F):
-    """Lọc tập nghiệm non-dominated (tất cả mục tiêu đều minimize)."""
-    n = len(F)
-    keep = np.ones(n, bool)
-    for i in range(n):
-        if not keep[i]:
-            continue
-        for j in range(n):
-            if i == j or not keep[j]:
-                continue
-            if np.all(F[j] <= F[i]) and np.any(F[j] < F[i]):
-                keep[i] = False
-                break
-    return keep
-
-
 @st.cache_data
-def _solve_bai7(n_sample=20000):
-    """NSGA-lite thuần numpy: lấy mẫu ngẫu nhiên thỏa ràng buộc rồi
-    trích đường biên Pareto bằng non-dominated sorting (không cần pymoo)."""
-    rng = np.random.default_rng(42)
+def _solve_bai7(n_gen=120):
+    from pymoo.core.problem import ElementwiseProblem
+    from pymoo.algorithms.moo.nsga2 import NSGA2
+    from pymoo.optimize import minimize as moo_min
+    from pymoo.termination import get_termination
+
     grdp = np.array([810, 3580, 1820, 420, 3050, 1409], float)
     region_min = grdp / grdp.sum() * TOTAL7 * 0.50
     cat_min = np.array([8000, 10000, 12000, 8000])
 
-    feas_X, feas_F = [], []
-    batch = 4000
-    while len(feas_X) < n_sample:
-        # Sinh phân bổ Dirichlet → tổng ngân sách, scale vào [0.85,1.0]·TOTAL7
-        w = rng.dirichlet(np.ones(24), size=batch)
-        tot = rng.uniform(0.85, 1.0, batch) * TOTAL7
-        Xs = w * tot[:, None]
-        for x in Xs:
+    class Prob(ElementwiseProblem):
+        def __init__(s):
+            super().__init__(n_var=24, n_obj=4, n_ieq_constr=12,
+                             xl=np.zeros(24), xu=np.ones(24) * 12000)
+
+        def _evaluate(s, x, out, *a, **k):
             X = x.reshape(6, 4)
-            if np.any(X > 12000):
-                continue
-            if np.any(X.sum(1) < region_min):
-                continue
-            if np.any(X.sum(0) < cat_min):
-                continue
             f1 = -(BETA7 * X).sum()
             sums = X.sum(1); f2 = np.abs(sums - sums.mean()).mean()
             f3 = (E7 * (X[:, 0] + X[:, 2])).sum()
             f4 = (RHO7 * X[:, 2]).sum() - (SIG7 * X[:, 3]).sum()
-            feas_X.append(x); feas_F.append([f1, f2, f3, f4])
-            if len(feas_X) >= n_sample:
-                break
-    F = np.array(feas_F); X = np.array(feas_X)
-    keep = _nondominated(F)
-    return F[keep], X[keep]
+            out["F"] = [f1, f2, f3, f4]
+            g = [X.sum() - TOTAL7, 0.85 * TOTAL7 - X.sum()]
+            for i in range(6):
+                g.append(region_min[i] - X[i].sum())
+            for j in range(4):
+                g.append(cat_min[j] - X[:, j].sum())
+            out["G"] = g
+
+    res = moo_min(Prob(), NSGA2(pop_size=100), get_termination("n_gen", n_gen),
+                  seed=42, verbose=False)
+    return res.F, res.X
 
 
 def page_bai7():
     header("Bài 7 — Tối ưu đa mục tiêu Pareto với NSGA-II",
            "4 mục tiêu xung đột: tăng trưởng, bao trùm, môi trường, an ninh dữ liệu.")
-    with st.spinner("Đang trích xuất đường biên Pareto (non-dominated sorting)..."):
+    with st.spinner("Đang chạy NSGA-II (pop=100, gen=120)..."):
         F, X = _solve_bai7()
     GDP = -F[:, 0]; Gini = F[:, 1]; CO2 = F[:, 2]; Sec = F[:, 3]
     st.metric("Số nghiệm Pareto", len(F))
