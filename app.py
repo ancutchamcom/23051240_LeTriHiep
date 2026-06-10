@@ -2,7 +2,7 @@
 #  AIDEOM-VN — Hệ thống Mô hình Ra quyết định Phát triển
 #  Kinh tế Việt Nam trong Kỷ nguyên AI
 #  Giao diện kiểm tra bài tập cho Giảng viên chấm điểm
-#  Sinh viên: Trần Hoàng Bách
+#  Sinh viên: Lê Trí Hiệp
 #  Viện Quản trị Kinh doanh — Đại học Kinh tế, ĐHQGHN
 #  Chạy:  streamlit run app.py
 # ============================================================
